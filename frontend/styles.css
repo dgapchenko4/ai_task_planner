@@ -126,3 +126,38 @@ body.light-theme .fc .fc-daygrid-day-number { color:#444!important; }
 body.light-theme .tag-title { color:#666; }
 body.light-theme .settings-card h4 { color:#222; }
 body.light-theme .modal-header h3 { color:#222; }
+
+/* ========== ИСПРАВЛЕНИЕ: ТЁМНЫЙ ТЕКСТ В КАЛЕНДАРЕ (СВЕТЛАЯ ТЕМА) ========== */
+body.light-theme .fc-event {
+    color: #1a1a2e !important;
+    font-weight: 600 !important;
+    text-shadow: none !important;
+}
+
+body.light-theme .fc-event-title {
+    color: #1a1a2e !important;
+    font-weight: 600 !important;
+}
+
+body.light-theme .fc-daygrid-event {
+    color: #1a1a2e !important;
+}
+
+body.light-theme .fc-daygrid-dot-event .fc-event-title {
+    color: #1a1a2e !important;
+    font-weight: 600 !important;
+}
+
+/* Цвета фона событий сохраняем, но делаем светлее для читаемости */
+body.light-theme .fc-event[style*="background-color:#ff4444"] {
+    background-color: #ff6b6b !important;
+    border-color: #ff6b6b !important;
+}
+body.light-theme .fc-event[style*="background-color:#ffbb33"] {
+    background-color: #ffd166 !important;
+    border-color: #ffd166 !important;
+}
+body.light-theme .fc-event[style*="background-color:#00C851"] {
+    background-color: #5cdb5c !important;
+    border-color: #5cdb5c !important;
+}
