@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Task Planner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="login-page">
+    <div class="login-box">
+        <h1>🤖 AI Task Planner</h1>
+        <form onsubmit="login(event)">
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="password" id="password" placeholder="Пароль" required>
+            <button type="submit">Войти</button>
+            <p id="error" style="color:red;display:none;"></p>
+        </form>
+    </div>
+</div>
+
+<div id="app-page" style="display:none;">
+    <div class="layout">
+        <div class="sidebar">
+            <h2>🤖 AI Planner</h2>
+            <button onclick="showTab('dashboard')" class="tab-btn active" id="btn-dashboard">📊 Дашборд</button>
+            <button onclick="showTab('tasks')" class="tab-btn" id="btn-tasks">📋 Задачи</button>
+            <button onclick="showTab('calendar')" class="tab-btn" id="btn-calendar">📅 Календарь</button>
+            <button onclick="logout()" style="margin-top:auto;background:#ff4444;color:white;border:none;padding:10px;border-radius:8px;cursor:pointer;">🚪 Выйти</button>
+        </div>
+        <div class="content">
+            <div id="tab-dashboard">
+                <h2>Дашборд</h2>
+                <button onclick="openModal()" class="add-btn">+ Новая задача</button>
+                <div id="stats" style="display:flex;gap:15px;margin:20px 0;flex-wrap:wrap;"></div>
+                <h3>Последние задачи</h3>
+                <div id="recent"></div>
+            </div>
+            <div id="tab-tasks" style="display:none;">
+                <h2>Мои задачи</h2>
+                <button onclick="openModal()" class="add-btn">+ Новая задача</button>
+                <div id="tasks"></div>
+            </div>
+            <div id="tab-calendar" style="display:none;">
+                <h2>Календарь</h2>
+                <button onclick="openModal()" class="add-btn">+ Новая задача</button>
+                <div id="calendar" style="margin-top:20px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно -->
+<div id="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;justify-content:center;align-items:center;">
+    <div style="background:#2d2d3f;padding:30px;border-radius:16px;width:500px;max-height:90vh;overflow-y:auto;">
+        <h2 id="modal-title">📝 Новая задача</h2>
+        <form onsubmit="saveTask(event)">
+            <input type="hidden" id="task-id">
+            <input type="text" id="task-title" placeholder="Заголовок задачи" required style="width:100%;padding:10px;margin:10px 0;background:#3a3a4f;border:none;border-radius:8px;color:#fff;">
+            <textarea id="task-desc" placeholder="Описание" rows="3" style="width:100%;padding:10px;margin:10px 0;background:#3a3a4f;border:none;border-radius:8px;color:#fff;resize:vertical;"></textarea>
+            <label style="color:#b0b0c0;font-size:13px;">Срок (оставьте пустым для автоопределения)</label>
+            <input type="datetime-local" id="task-due" style="width:100%;padding:10px;margin:10px 0;background:#3a3a4f;border:none;border-radius:8px;color:#fff;">
+            <button type="submit" style="width:100%;padding:12px;background:#6C5CE7;color:#fff;border:none;border-radius:8px;cursor:pointer;">💾 Сохранить</button>
+            <button type="button" onclick="closeModal()" style="width:100%;padding:12px;background:transparent;border:1px solid #ff4444;color:#ff4444;border-radius:8px;cursor:pointer;margin-top:8px;">Отмена</button>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/locales/ru.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
