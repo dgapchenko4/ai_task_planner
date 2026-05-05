@@ -1,3 +1,48 @@
+// Исправленная showTab
+function showTab(t) {
+    // Скрыть ВСЕ вкладки
+    var allTabs = document.querySelectorAll('.tab-content');
+    for (var i = 0; i < allTabs.length; i++) {
+        allTabs[i].style.display = 'none';
+    }
+    
+    // Показать нужную
+    var target = document.getElementById('tab-' + t);
+    if (target) target.style.display = 'block';
+    
+    // Подсветка кнопки
+    var btns = document.querySelectorAll('.tab-btn');
+    for (var j = 0; j < btns.length; j++) {
+        btns[j].classList.remove('active');
+    }
+    var idx = { dash: 0, tasks: 1, cal: 2, settings: 3 }[t];
+    if (idx !== undefined && btns[idx]) btns[idx].classList.add('active');
+    
+    // Загрузка данных
+    if (t === 'dash') loadDashboard();
+    if (t === 'tasks') loadTasks();
+    if (t === 'cal') setTimeout(initCal, 300);
+    if (t === 'settings') loadSettings();
+}
+
+// Переключение темы
+function toggleTheme() {
+    var isLight = document.getElementById('set-theme').checked;
+    if (isLight) {
+        document.body.classList.add('light-theme');
+        localStorage.setItem('theme', 'light');
+    } else {
+        document.body.classList.remove('light-theme');
+        localStorage.setItem('theme', 'dark');
+    }
+}
+
+// Загрузка темы при старте
+(function() {
+    if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light-theme');
+    }
+})();
 var API = 'http://localhost:8000/api';
 var token = localStorage.getItem('access_token');
 var calendar = null;
@@ -304,3 +349,59 @@ function saveSettings() {
 }
 
 console.log('Script loaded successfully!');
+
+// ========== ПЕРЕКЛЮЧЕНИЕ ТЕМЫ ==========
+function toggleTheme() {
+    var isLight = document.getElementById('set-theme').checked;
+    if (isLight) {
+        document.body.classList.add('light-theme');
+        localStorage.setItem('theme', 'light');
+    } else {
+        document.body.classList.remove('light-theme');
+        localStorage.setItem('theme', 'dark');
+    }
+}
+
+// Загрузка темы при старте
+(function() {
+    var savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+        // Чекбокс обновится при загрузке настроек
+    }
+})();
+
+// Обновим loadSettings для учета темы
+var origLoadSettings = loadSettings;
+loadSettings = function() {
+    origLoadSettings();
+    // Установим чекбокс темы
+    var isLight = document.body.classList.contains('light-theme');
+    var themeCheckbox = document.getElementById('set-theme');
+    if (themeCheckbox) themeCheckbox.checked = isLight;
+};
+
+// Обновленная загрузка настроек
+var origLoadSettings2 = loadSettings;
+loadSettings = function() {
+    if (typeof origLoadSettings2 === 'function') origLoadSettings2();
+    
+    // Установка темы
+    var themeCheckbox = document.getElementById('set-theme');
+    if (themeCheckbox) {
+        themeCheckbox.checked = document.body.classList.contains('light-theme');
+    }
+    
+    // Загрузка остальных настроек
+    api('/auth/notification-settings/').then(function(s) {
+        var emailEl = document.getElementById('set-email');
+        var morningEl = document.getElementById('set-morning');
+        var timeEl = document.getElementById('set-morning-time');
+        var reminderEl = document.getElementById('set-reminder');
+        
+        if (emailEl) emailEl.checked = s.email_notifications;
+        if (morningEl) morningEl.checked = s.morning_summary;
+        if (timeEl) timeEl.value = s.morning_summary_time || '08:00';
+        if (reminderEl) reminderEl.value = s.reminder_before_task || 30;
+    }).catch(function(e) {});
+};
