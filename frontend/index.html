@@ -6,66 +6,175 @@
     <title>AI Task Planner</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Inter',sans-serif; background:#1a1a2e; color:#fff; min-height:100vh; }
+        .page { display:none; }
+        .page.active { display:flex; }
+        
+        #auth-page { justify-content:center; align-items:center; height:100vh; }
+        .auth-box { background:#2d2d3f; padding:30px; border-radius:16px; width:400px; text-align:center; }
+        .auth-box h2 { margin-bottom:20px; }
+        .auth-box input { width:100%; padding:12px; margin:8px 0; background:#3a3a4f; border:none; border-radius:8px; color:#fff; font-size:14px; }
+        .auth-box button { width:100%; padding:12px; background:#6C5CE7; color:#fff; border:none; border-radius:8px; font-size:16px; cursor:pointer; margin-top:5px; }
+        .auth-box .link { color:#6C5CE7; cursor:pointer; text-decoration:underline; font-size:14px; }
+        .auth-box .error { color:#ff4444; font-size:13px; margin-top:8px; display:none; }
+        
+        #app-page { flex-direction:row; }
+        .sidebar { width:240px; background:#2d2d3f; padding:20px; display:flex; flex-direction:column; gap:6px; min-height:100vh; }
+        .sidebar h3 { font-size:16px; margin-bottom:15px; }
+        .tab-btn { padding:10px; background:transparent; border:none; color:#b0b0c0; border-radius:8px; cursor:pointer; text-align:left; font-size:14px; }
+        .tab-btn:hover, .tab-btn.active { background:#3a3a4f; color:#fff; }
+        .content { flex:1; padding:25px; overflow-y:auto; max-height:100vh; }
+        .add-btn { padding:10px 18px; background:#6C5CE7; color:#fff; border:none; border-radius:8px; cursor:pointer; margin:10px 0 20px; }
+        
+        .stat { background:#2d2d3f; padding:15px; border-radius:10px; flex:1; min-width:130px; text-align:center; }
+        .stat .n { font-size:26px; font-weight:700; }
+        .stat .l { color:#b0b0c0; font-size:12px; }
+        
+        .task { background:#2d2d3f; padding:14px; border-radius:10px; border-left:4px solid #6C5CE7; margin-bottom:8px; }
+        .task.high { border-left-color:#ff4444; }
+        .task.medium { border-left-color:#ffbb33; }
+        .task.low { border-left-color:#00C851; }
+        .task .row { display:flex; justify-content:space-between; align-items:flex-start; }
+        .task h4 { margin:0 0 4px; font-size:14px; }
+        .task .desc { color:#b0b0c0; font-size:12px; margin:0; }
+        .task .meta { display:flex; gap:10px; margin:6px 0; font-size:11px; color:#7a7a8c; flex-wrap:wrap; }
+        .task .tags { display:flex; gap:4px; flex-wrap:wrap; }
+        .task .tags span { background:#3a3a4f; padding:2px 8px; border-radius:10px; font-size:10px; color:#A29BFE; cursor:pointer; }
+        
+        .tag-filter { display:flex; flex-wrap:wrap; gap:5px; margin-top:15px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); }
+        .tag-filter span { background:#3a3a4f; padding:3px 8px; border-radius:10px; font-size:10px; cursor:pointer; }
+        .tag-filter span.active { background:#6C5CE7; }
+        
+        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999; justify-content:center; align-items:center; }
+        .modal.active { display:flex; }
+        .modal-box { background:#2d2d3f; padding:25px; border-radius:14px; width:480px; max-height:90vh; overflow-y:auto; }
+        .modal-box input, .modal-box textarea, .modal-box select { width:100%; padding:10px; margin:8px 0; background:#3a3a4f; border:none; border-radius:8px; color:#fff; font-family:inherit; }
+        .modal-box textarea { resize:vertical; min-height:70px; }
+        .modal-box button { width:100%; padding:10px; border:none; border-radius:8px; cursor:pointer; font-size:14px; margin-top:5px; }
+        .btn-save { background:#6C5CE7; color:#fff; }
+        .btn-cancel { background:transparent; border:1px solid #ff4444; color:#ff4444; }
+        
+        #calendar { background:#2d2d3f; padding:15px; border-radius:12px; }
+        .fc { color:#fff; }
+        .fc-theme-standard td, .fc-theme-standard th { border-color:rgba(255,255,255,0.08)!important; }
+        .fc .fc-toolbar-title { color:#fff!important; font-size:1.1em!important; }
+        .fc .fc-button { background:#3a3a4f!important; border:none!important; color:#fff!important; }
+        .fc .fc-button:hover, .fc .fc-button-active { background:#6C5CE7!important; }
+        .fc .fc-daygrid-day-number { color:#b0b0c0!important; }
+        .fc .fc-day-today { background:rgba(108,92,231,0.15)!important; }
+        .fc-event { border:none!important; padding:2px 5px!important; font-size:10px!important; border-radius:4px!important; cursor:pointer!important; }
+        
+        .settings-group { background:#2d2d3f; padding:16px; border-radius:10px; margin-bottom:15px; }
+        .settings-group label { display:flex; align-items:center; gap:10px; margin:8px 0; cursor:pointer; }
+        .settings-group input[type="checkbox"] { width:18px; height:18px; }
+        .settings-group select { width:auto; padding:6px 10px; background:#3a3a4f; border:none; border-radius:6px; color:#fff; }
+    </style>
 </head>
 <body>
 
-<div id="login-page">
-    <div class="login-box">
-        <h1>🤖 AI Task Planner</h1>
-        <form onsubmit="login(event)">
-            <input type="email" id="email" placeholder="Email" required>
-            <input type="password" id="password" placeholder="Пароль" required>
-            <button type="submit">Войти</button>
-            <p id="error" style="color:red;display:none;"></p>
-        </form>
-    </div>
-</div>
-
-<div id="app-page" style="display:none;">
-    <div class="layout">
-        <div class="sidebar">
-            <h2>🤖 AI Planner</h2>
-            <button onclick="showTab('dashboard')" class="tab-btn active" id="btn-dashboard">📊 Дашборд</button>
-            <button onclick="showTab('tasks')" class="tab-btn" id="btn-tasks">📋 Задачи</button>
-            <button onclick="showTab('calendar')" class="tab-btn" id="btn-calendar">📅 Календарь</button>
-            <button onclick="logout()" style="margin-top:auto;background:#ff4444;color:white;border:none;padding:10px;border-radius:8px;cursor:pointer;">🚪 Выйти</button>
+<!-- АВТОРИЗАЦИЯ -->
+<div id="auth-page" class="page active">
+    <div class="auth-box">
+        <h2>🤖 AI Task Planner</h2>
+        <div id="login-form">
+            <input type="email" id="login-email" placeholder="Email">
+            <input type="password" id="login-password" placeholder="Пароль">
+            <button onclick="doLogin()">Войти</button>
+            <p class="error" id="login-error"></p>
+            <p style="margin-top:12px;color:#b0b0c0;font-size:13px;">Нет аккаунта? <span class="link" onclick="showForm('register')">Регистрация</span></p>
         </div>
-        <div class="content">
-            <div id="tab-dashboard">
-                <h2>Дашборд</h2>
-                <button onclick="openModal()" class="add-btn">+ Новая задача</button>
-                <div id="stats" style="display:flex;gap:15px;margin:20px 0;flex-wrap:wrap;"></div>
-                <h3>Последние задачи</h3>
-                <div id="recent"></div>
-            </div>
-            <div id="tab-tasks" style="display:none;">
-                <h2>Мои задачи</h2>
-                <button onclick="openModal()" class="add-btn">+ Новая задача</button>
-                <div id="tasks"></div>
-            </div>
-            <div id="tab-calendar" style="display:none;">
-                <h2>Календарь</h2>
-                <button onclick="openModal()" class="add-btn">+ Новая задача</button>
-                <div id="calendar" style="margin-top:20px;"></div>
-            </div>
+        <div id="register-form" style="display:none;">
+            <input type="text" id="reg-user" placeholder="Логин">
+            <input type="text" id="reg-first" placeholder="Имя">
+            <input type="text" id="reg-last" placeholder="Фамилия">
+            <input type="email" id="reg-email" placeholder="Email">
+            <input type="password" id="reg-pass1" placeholder="Пароль">
+            <input type="password" id="reg-pass2" placeholder="Повторите пароль">
+            <button onclick="doRegister()">Зарегистрироваться</button>
+            <p class="error" id="reg-error"></p>
+            <p style="margin-top:12px;color:#b0b0c0;font-size:13px;">Есть аккаунт? <span class="link" onclick="showForm('login')">Войти</span></p>
         </div>
     </div>
 </div>
 
-<!-- Модальное окно -->
-<div id="modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;justify-content:center;align-items:center;">
-    <div style="background:#2d2d3f;padding:30px;border-radius:16px;width:500px;max-height:90vh;overflow-y:auto;">
-        <h2 id="modal-title">📝 Новая задача</h2>
-        <form onsubmit="saveTask(event)">
-            <input type="hidden" id="task-id">
-            <input type="text" id="task-title" placeholder="Заголовок задачи" required style="width:100%;padding:10px;margin:10px 0;background:#3a3a4f;border:none;border-radius:8px;color:#fff;">
-            <textarea id="task-desc" placeholder="Описание" rows="3" style="width:100%;padding:10px;margin:10px 0;background:#3a3a4f;border:none;border-radius:8px;color:#fff;resize:vertical;"></textarea>
-            <label style="color:#b0b0c0;font-size:13px;">Срок (оставьте пустым для автоопределения)</label>
-            <input type="datetime-local" id="task-due" style="width:100%;padding:10px;margin:10px 0;background:#3a3a4f;border:none;border-radius:8px;color:#fff;">
-            <button type="submit" style="width:100%;padding:12px;background:#6C5CE7;color:#fff;border:none;border-radius:8px;cursor:pointer;">💾 Сохранить</button>
-            <button type="button" onclick="closeModal()" style="width:100%;padding:12px;background:transparent;border:1px solid #ff4444;color:#ff4444;border-radius:8px;cursor:pointer;margin-top:8px;">Отмена</button>
-        </form>
+<!-- ПРИЛОЖЕНИЕ -->
+<div id="app-page" class="page">
+    <div class="sidebar">
+        <h3>🤖 AI Planner</h3>
+        <button class="tab-btn active" onclick="showTab('dash')">📊 Дашборд</button>
+        <button class="tab-btn" onclick="showTab('tasks')">📋 Задачи</button>
+        <button class="tab-btn" onclick="showTab('cal')">📅 Календарь</button>
+        <button class="tab-btn" onclick="showTab('settings')">⚙️ Настройки</button>
+        
+        <div class="tag-filter">
+            <span style="font-size:10px;color:#7a7a8c;width:100%;">🏷 Теги:</span>
+            <div id="tags-list" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+            <span onclick="clearFilter()" style="background:transparent;border:1px solid #ff4444;color:#ff4444;margin-top:4px;padding:2px 8px;">✕ Сбросить</span>
+        </div>
+        
+        <button onclick="doLogout()" style="margin-top:auto;padding:8px;background:#ff4444;color:#fff;border:none;border-radius:8px;cursor:pointer;">🚪 Выйти</button>
+    </div>
+    <div class="content">
+        <div id="tab-dash">
+            <h2>Дашборд</h2>
+            <button class="add-btn" onclick="openModal()">+ Новая задача</button>
+            <div id="stats" style="display:flex;gap:12px;margin:15px 0 25px;flex-wrap:wrap;"></div>
+            <h4>Последние задачи</h4>
+            <div id="recent-tasks"></div>
+        </div>
+        <div id="tab-tasks" style="display:none;">
+            <h2>Задачи <span id="filter-info" style="color:#6C5CE7;font-size:14px;display:none;"></span></h2>
+            <button class="add-btn" onclick="openModal()">+ Новая задача</button>
+            <div id="all-tasks"></div>
+        </div>
+        <div id="tab-cal" style="display:none;">
+            <h2>Календарь</h2>
+            <button class="add-btn" onclick="openModal()">+ Новая задача</button>
+            <div id="calendar"></div>
+        </div>
+        <div id="tab-settings" style="display:none;">
+            <h2>⚙️ Настройки уведомлений</h2>
+            <div class="settings-group">
+                <h4>📧 Email уведомления</h4>
+                <label><input type="checkbox" id="set-email" onchange="saveSettings()"> Включить уведомления на почту</label>
+            </div>
+            <div class="settings-group">
+                <h4>🌅 Утренняя сводка</h4>
+                <label><input type="checkbox" id="set-morning" onchange="saveSettings()"> Присылать утреннюю сводку задач</label>
+                <label>Время: 
+                    <input type="time" id="set-morning-time" onchange="saveSettings()" value="08:00">
+                </label>
+            </div>
+            <div class="settings-group">
+                <h4>⏰ Напоминания</h4>
+                <label>Напоминать за 
+                    <select id="set-reminder" onchange="saveSettings()">
+                        <option value="5">5 минут</option>
+                        <option value="15">15 минут</option>
+                        <option value="30" selected>30 минут</option>
+                        <option value="60">1 час</option>
+                        <option value="120">2 часа</option>
+                    </select>
+                    до задачи
+                </label>
+            </div>
+            <p id="settings-saved" style="color:#00C851;display:none;">✅ Настройки сохранены</p>
+        </div>
+    </div>
+</div>
+
+<!-- МОДАЛКА -->
+<div id="modal" class="modal">
+    <div class="modal-box">
+        <h3 id="modal-title">📝 Новая задача</h3>
+        <input type="hidden" id="edit-id">
+        <input type="text" id="task-title" placeholder="Заголовок">
+        <textarea id="task-desc" placeholder="Описание"></textarea>
+        <input type="datetime-local" id="task-due">
+        <button class="btn-save" onclick="saveTask()">💾 Сохранить</button>
+        <button class="btn-cancel" onclick="closeModal()">Отмена</button>
     </div>
 </div>
 

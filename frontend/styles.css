@@ -117,3 +117,23 @@ body { font-family: 'Inter', sans-serif; background: #1a1a2e; color: #fff; min-h
     transition: all 0.2s;
 }
 .add-btn:hover { background: #5A4BD1; transform: translateY(-2px); }
+
+.task-card {
+    background: #2d2d3f;
+    padding: 16px;
+    border-radius: 10px;
+    border-left: 4px solid #6C5CE7;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+}
+.task-card:hover { transform: translateX(4px); }
+.task-card.priority-high { border-left-color: #FF4444; }
+.task-card.priority-medium { border-left-color: #FFBB33; }
+.task-card.priority-low { border-left-color: #00C851; }
+
+.filter-tag {
+    transition: all 0.2s;
+}
+.filter-tag:hover {
+    transform: scale(1.05);
+}

@@ -1,31 +1,59 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
+from django.core.mail import send_mail
+from django.conf import settings
 from datetime import datetime, time, date, timedelta
 import re
 
 from .models import Task, AIAnalysisLog
-from .serializers import TaskSerializer
+from .serializers import TaskSerializer, TaskUpdateSerializer
 from .ai_service import ai_service
 
 class TaskViewSet(viewsets.ModelViewSet):
-    serializer_class = TaskSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action in ['update', 'partial_update']:
+            return TaskUpdateSerializer
+        return TaskSerializer
     
     def get_queryset(self):
         qs = Task.objects.filter(user=self.request.user)
-        status = self.request.query_params.get('status')
-        priority = self.request.query_params.get('priority')
+        
+        # Фильтры
+        status_filter = self.request.query_params.get('status')
+        priority_filter = self.request.query_params.get('priority')
         search = self.request.query_params.get('search')
-        if status: qs = qs.filter(status=status)
-        if priority: qs = qs.filter(priority=priority)
-        if search: qs = qs.filter(title__icontains=search)
+        tag_filter = self.request.query_params.get('tag')  # НОВОЕ: фильтр по тегу
+        
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if priority_filter:
+            qs = qs.filter(priority=priority_filter)
+        if search:
+            qs = qs.filter(title__icontains=search)
+        if tag_filter:
+            # Фильтрация по JSON полю tags
+            qs = qs.filter(tags__contains=[tag_filter])
+        
         return qs
     
     def perform_create(self, serializer):
         task = serializer.save(user=self.request.user)
+        self._analyze_task(task)
         
+        # Отправляем уведомление на почту
+        self._send_email_notification(task, 'created')
+    
+    def perform_update(self, serializer):
+        task = serializer.save()
+        if 'title' in serializer.validated_data:
+            self._analyze_task(task)
+    
+    def _analyze_task(self, task):
+        """AI анализ задачи"""
         try:
             analysis = ai_service.analyze_task(task.title)
             task.short_summary = analysis.get('summary', task.title[:200])
@@ -34,22 +62,59 @@ class TaskViewSet(viewsets.ModelViewSet):
             task.tags = analysis.get('tags', [])
             task.ai_analysis = analysis
             
-            # Обработка даты
-            user_date = self.request.data.get('due_date')
-            
-            if user_date and str(user_date).strip():
-                task.due_date = user_date
-            else:
+            if not task.due_date:
                 parsed = self._parse_datetime(task.title)
                 if parsed:
                     task.due_date = parsed
             
             task.save()
             AIAnalysisLog.objects.create(task=task, prompt=task.title, response=analysis)
-            
         except Exception as e:
-            print(f"Error: {e}")
-            task.save()
+            print(f"AI error: {e}")
+    
+    def _send_email_notification(self, task, action):
+        """Отправка уведомления на почту"""
+        user = self.request.user
+        
+        # Проверяем настройки
+        if not hasattr(user, 'email_notifications') or not user.email_notifications:
+            return
+        
+        if not settings.EMAIL_HOST_USER or settings.EMAIL_HOST_USER == 'your-email@gmail.com':
+            print("Email settings not configured")
+            return
+        
+        try:
+            if action == 'created':
+                subject = f'Новая задача создана: {task.title[:50]}'
+                message = f"""
+                Здравствуйте, {user.first_name}!
+                
+                Создана новая задача:
+                
+                📝 Заголовок: {task.title}
+                📋 Краткая суть: {task.short_summary or 'Не определена'}
+                🔥 Приоритет: {task.get_priority_display()}
+                ⏱ Время выполнения: {task.estimated_duration or 'Не определено'} минут
+                🏷 Теги: {', '.join(task.tags) if task.tags else 'Нет'}
+                📅 Срок: {task.due_date.strftime('%d.%m.%Y %H:%M') if task.due_date else 'Не задан'}
+                
+                Войдите в планировщик: http://localhost:3000
+                
+                С уважением,
+                AI Task Planner
+                """
+                
+                send_mail(
+                    subject=subject,
+                    message=message,
+                    from_email=settings.EMAIL_HOST_USER,
+                    recipient_list=[user.email],
+                    fail_silently=True,
+                )
+                print(f"Email sent to {user.email}")
+        except Exception as e:
+            print(f"Email error: {e}")
     
     def _parse_datetime(self, text: str):
         """Извлечение даты и времени из текста"""
@@ -58,7 +123,6 @@ class TaskViewSet(viewsets.ModelViewSet):
         target_date = None
         hour, minute = 18, 0
         
-        # Послезавтра (до завтра!)
         if 'послезавтра' in text_lower:
             target_date = today + timedelta(days=2)
         elif 'завтра' in text_lower:
@@ -70,7 +134,6 @@ class TaskViewSet(viewsets.ModelViewSet):
             if match:
                 target_date = today + timedelta(days=int(match.group(1)))
         
-        # Дни недели
         if not target_date:
             days_map = {'понедельник': 0, 'вторник': 1, 'среду': 2, 'среда': 2,
                        'четверг': 3, 'пятницу': 4, 'пятница': 4,
@@ -83,7 +146,6 @@ class TaskViewSet(viewsets.ModelViewSet):
                     target_date = today + timedelta(days=d)
                     break
         
-        # Явная дата
         if not target_date:
             match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', text)
             if match:
@@ -94,7 +156,6 @@ class TaskViewSet(viewsets.ModelViewSet):
         if not target_date:
             return None
         
-        # Время: ищем "в ЧЧ:ММ" или "в ЧЧ.ММ" или "ЧЧ:ММ"
         time_match = re.search(r'(?:в\s+)?(\d{1,2})[:.](\d{2})', text_lower)
         if time_match:
             h, m = int(time_match.group(1)), int(time_match.group(2))
@@ -106,7 +167,21 @@ class TaskViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def mark_completed(self, request, pk=None):
-        self.get_object().mark_as_completed()
+        task = self.get_object()
+        task.mark_as_completed()
+        
+        # Уведомление о выполнении
+        if task.user.email_notifications:
+            try:
+                send_mail(
+                    subject=f'Задача выполнена: {task.title[:50]}',
+                    message=f'Задача "{task.title}" отмечена как выполненная.',
+                    from_email=settings.EMAIL_HOST_USER,
+                    recipient_list=[task.user.email],
+                    fail_silently=True,
+                )
+            except: pass
+        
         return Response({'status': 'ok'})
     
     @action(detail=False, methods=['get'])
@@ -122,6 +197,16 @@ class TaskViewSet(viewsets.ModelViewSet):
             'low_priority': tasks.filter(priority='low').count(),
             'overdue': tasks.filter(due_date__lt=timezone.now(), status__in=['pending', 'in_progress']).count(),
         })
+    
+    @action(detail=False, methods=['get'])
+    def tags_list(self, request):
+        """Список всех тегов пользователя"""
+        tasks = self.get_queryset()
+        all_tags = set()
+        for task in tasks:
+            if task.tags:
+                all_tags.update(task.tags)
+        return Response(sorted(list(all_tags)))
     
     @action(detail=False, methods=['get'])
     def calendar_data(self, request):

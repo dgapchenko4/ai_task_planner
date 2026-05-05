@@ -1,383 +1,306 @@
-const API = 'http://localhost:8000/api';
-let token = localStorage.getItem('access_token');
-let calendar = null;
+var API = 'http://localhost:8000/api';
+var token = localStorage.getItem('access_token');
+var calendar = null;
+var filterTag = null;
 
-// ========== ИНИЦИАЛИЗАЦИЯ ==========
-document.addEventListener('DOMContentLoaded', function() {
-    if (token) {
-        document.getElementById('login-page').style.display = 'none';
-        document.getElementById('app-page').style.display = 'block';
-        showTab('dashboard');
-    }
-});
-
-// ========== ЛОГИН ==========
-async function login(e) {
-    e.preventDefault();
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const err = document.getElementById('error');
-    
-    try {
-        const res = await fetch(`${API}/auth/login/`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({email, password})
-        });
-        
-        if (!res.ok) throw new Error('Неверный логин или пароль');
-        
-        const data = await res.json();
-        token = data.access;
-        localStorage.setItem('access_token', token);
-        localStorage.setItem('refresh_token', data.refresh);
-        
-        document.getElementById('login-page').style.display = 'none';
-        document.getElementById('app-page').style.display = 'block';
-        showTab('dashboard');
-    } catch(error) {
-        err.textContent = error.message;
-        err.style.display = 'block';
-    }
+if (token) {
+    console.log('Token found, checking...');
+    fetch(API + '/auth/profile/', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(r) {
+        if (r.ok) {
+            console.log('Token valid');
+            showApp();
+        } else {
+            console.log('Token invalid');
+            localStorage.clear();
+            token = null;
+            showAuth();
+        }
+    })
+    .catch(function() {
+        showAuth();
+    });
+} else {
+    showAuth();
 }
 
-function logout() {
+function showAuth() {
+    document.getElementById('auth-page').style.display = 'flex';
+    document.getElementById('app-page').style.display = 'none';
+    document.getElementById('login-form').style.display = 'block';
+    document.getElementById('register-form').style.display = 'none';
+}
+
+function showApp() {
+    document.getElementById('auth-page').style.display = 'none';
+    document.getElementById('app-page').style.display = 'flex';
+    showTab('dash');
+    loadTags();
+}
+
+function showForm(f) {
+    document.getElementById('login-form').style.display = (f === 'login') ? 'block' : 'none';
+    document.getElementById('register-form').style.display = (f === 'register') ? 'block' : 'none';
+}
+
+function doLogin() {
+    var err = document.getElementById('login-error');
+    err.style.display = 'none';
+    var email = document.getElementById('login-email').value.trim();
+    var pass = document.getElementById('login-password').value;
+    
+    if (!email || !pass) {
+        err.textContent = 'Заполните поля';
+        err.style.display = 'block';
+        return;
+    }
+    
+    console.log('Logging in:', email);
+    fetch(API + '/auth/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, password: pass })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        console.log('Login response:', d);
+        if (d.access) {
+            token = d.access;
+            localStorage.setItem('access_token', token);
+            localStorage.setItem('refresh_token', d.refresh);
+            showApp();
+        } else {
+            err.textContent = 'Неверный email или пароль';
+            err.style.display = 'block';
+        }
+    })
+    .catch(function(e) {
+        err.textContent = 'Ошибка соединения';
+        err.style.display = 'block';
+    });
+}
+
+function doRegister() {
+    var err = document.getElementById('reg-error');
+    err.style.display = 'none';
+    
+    var data = {
+        username: document.getElementById('reg-user').value.trim(),
+        first_name: document.getElementById('reg-first').value.trim(),
+        last_name: document.getElementById('reg-last').value.trim(),
+        email: document.getElementById('reg-email').value.trim(),
+        password: document.getElementById('reg-pass1').value,
+        password2: document.getElementById('reg-pass2').value
+    };
+    
+    if (!data.username || !data.email || !data.password) {
+        err.textContent = 'Заполните все поля';
+        err.style.display = 'block';
+        return;
+    }
+    if (data.password !== data.password2) {
+        err.textContent = 'Пароли не совпадают';
+        err.style.display = 'block';
+        return;
+    }
+    
+    console.log('Registering:', data.email);
+    fetch(API + '/auth/register/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.access) {
+            token = d.access;
+            localStorage.setItem('access_token', token);
+            localStorage.setItem('refresh_token', d.refresh);
+            showApp();
+        } else {
+            err.textContent = d.error || JSON.stringify(d);
+            err.style.display = 'block';
+        }
+    })
+    .catch(function(e) {
+        err.textContent = 'Ошибка соединения';
+        err.style.display = 'block';
+    });
+}
+
+function doLogout() {
     token = null;
     localStorage.clear();
-    if (calendar) calendar.destroy();
-    calendar = null;
-    document.getElementById('login-page').style.display = 'flex';
-    document.getElementById('app-page').style.display = 'none';
+    if (calendar) { calendar.destroy(); calendar = null; }
+    showAuth();
 }
 
-// ========== API ==========
-async function api(url, opt = {}) {
-    const res = await fetch(`${API}${url}`, {
-        ...opt,
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            ...opt.headers
-        }
+function showTab(t) {
+    // Скрыть все вкладки
+    var tabs = ['dash', 'tasks', 'cal', 'settings'];
+    for (var i = 0; i < tabs.length; i++) {
+        var el = document.getElementById('tab-' + tabs[i]);
+        if (el) el.style.display = 'none';
+    }
+    // Показать нужную
+    var target = document.getElementById('tab-' + t);
+    if (target) target.style.display = 'block';
+    
+    // Подсветка кнопки
+    var btns = document.querySelectorAll('.tab-btn');
+    for (var j = 0; j < btns.length; j++) btns[j].classList.remove('active');
+    var idx = { dash: 0, tasks: 1, cal: 2, settings: 3 }[t];
+    if (idx !== undefined && btns[idx]) btns[idx].classList.add('active');
+    
+    if (t === 'dash') loadDashboard();
+    if (t === 'tasks') loadTasks();
+    if (t === 'cal') setTimeout(initCal, 300);
+    if (t === 'settings') loadSettings();
+}
+
+function api(url, opt) {
+    opt = opt || {};
+    opt.headers = opt.headers || {};
+    opt.headers['Content-Type'] = 'application/json';
+    opt.headers['Authorization'] = 'Bearer ' + token;
+    
+    return fetch(API + url, opt).then(function(r) {
+        if (r.status === 401) { doLogout(); throw new Error('Auth'); }
+        if (r.status === 204) return {};
+        return r.json();
     });
-    if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
-    if (res.status === 204) return {};
-    return res.json();
 }
 
-// ========== НАВИГАЦИЯ ==========
-function showTab(tab) {
-    document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
-    const tabEl = document.getElementById(`tab-${tab}`);
-    if (tabEl) tabEl.style.display = 'block';
-    
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    const btnEl = document.getElementById(`btn-${tab}`);
-    if (btnEl) btnEl.classList.add('active');
-    
-    if (tab === 'dashboard') loadDashboard();
-    if (tab === 'tasks') loadTasks();
-    if (tab === 'calendar') setTimeout(initCalendar, 200);
+function loadTags() {
+    api('/tasks/tasks/tags_list/').then(function(tags) {
+        var c = document.getElementById('tags-list');
+        if (!tags.length) { c.innerHTML = '<span style="color:#7a7a8c;font-size:10px;">нет</span>'; return; }
+        c.innerHTML = tags.map(function(t) {
+            return '<span style="background:' + (filterTag === t ? '#6C5CE7' : '#3a3a4f') + ';padding:3px 8px;border-radius:10px;font-size:10px;cursor:pointer;" onclick="setFilter(\'' + t + '\')">#' + t + '</span>';
+        }).join('');
+    }).catch(function(e) { console.error(e); });
 }
 
-// ========== ДАШБОРД ==========
-async function loadDashboard() {
-    try {
-        const stats = await api('/tasks/tasks/statistics/');
-        document.getElementById('stats').innerHTML = `
-            <div class="stat-box"><div class="num">${stats.total||0}</div><div class="lbl">Всего</div></div>
-            <div class="stat-box"><div class="num">${(stats.pending||0)+(stats.in_progress||0)}</div><div class="lbl">Активных</div></div>
-            <div class="stat-box"><div class="num">${stats.completed||0}</div><div class="lbl">Выполнено</div></div>
-            <div class="stat-box"><div class="num">${stats.high_priority||0}</div><div class="lbl">Срочных</div></div>
-        `;
-        
-        const tasks = await api('/tasks/tasks/');
-        const list = Array.isArray(tasks) ? tasks.slice(0,5) : (tasks.results||[]).slice(0,5);
-        renderTasks(list, 'recent');
-    } catch(err) { console.error(err); }
+function setFilter(tag) {
+    filterTag = (filterTag === tag) ? null : tag;
+    loadTags(); loadTasks(); loadDashboard();
+}
+function clearFilter() { filterTag = null; loadTags(); loadTasks(); loadDashboard(); }
+
+function loadDashboard() {
+    api('/tasks/tasks/statistics/').then(function(s) {
+        document.getElementById('stats').innerHTML =
+            '<div class="stat"><div class="n">' + (s.total || 0) + '</div><div class="l">Всего</div></div>' +
+            '<div class="stat"><div class="n">' + ((s.pending || 0) + (s.in_progress || 0)) + '</div><div class="l">Активных</div></div>' +
+            '<div class="stat"><div class="n">' + (s.completed || 0) + '</div><div class="l">Выполнено</div></div>' +
+            '<div class="stat"><div class="n">' + (s.high_priority || 0) + '</div><div class="l">Срочных</div></div>';
+        var url = '/tasks/tasks/'; if (filterTag) url += '?tag=' + filterTag;
+        return api(url);
+    }).then(function(tasks) {
+        var list = Array.isArray(tasks) ? tasks.slice(0, 5) : (tasks.results || []).slice(0, 5);
+        renderTasks(list, 'recent-tasks');
+    }).catch(function(e) {});
 }
 
-// ========== ЗАДАЧИ ==========
-async function loadTasks() {
-    try {
-        const tasks = await api('/tasks/tasks/');
-        const list = Array.isArray(tasks) ? tasks : (tasks.results||[]);
-        renderTasks(list, 'tasks');
-    } catch(err) { console.error(err); }
+function loadTasks() {
+    var url = '/tasks/tasks/'; if (filterTag) url += '?tag=' + filterTag;
+    api(url).then(function(tasks) {
+        var list = Array.isArray(tasks) ? tasks : (tasks.results || []);
+        renderTasks(list, 'all-tasks');
+    }).catch(function(e) {});
 }
 
-function renderTasks(list, containerId) {
-    const c = document.getElementById(containerId);
-    if (!c) return;
-    if (!list.length) { c.innerHTML = '<p style="color:#b0b0c0;padding:20px;">Нет задач</p>'; return; }
-    
-    c.innerHTML = list.map(t => `
-        <div class="task-card ${t.priority||'medium'}" id="task-${t.id}">
-            <div class="task-card-header">
-                <div>
-                    <h4>${t.short_summary || t.title || 'Без названия'}</h4>
-                    <p>${t.description||''}</p>
-                </div>
-                <div class="task-card-actions">
-                    ${t.status!=='completed' ? `<button onclick="completeTask('${t.id}')" title="Выполнено">✅</button>` : ''}
-                    <button onclick="editTask('${t.id}')" title="Редактировать">✏️</button>
-                    <button onclick="deleteTask('${t.id}')" title="Удалить">🗑️</button>
-                </div>
-            </div>
-            <div class="task-meta">
-                <span class="priority-badge ${t.priority}">${t.priority==='high'?'🔥 Высокий':t.priority==='medium'?'🟡 Средний':'🟢 Низкий'}</span>
-                ${t.estimated_duration?`<span>⏱ ${t.estimated_duration} мин</span>`:''}
-                ${t.due_date?`<span>📅 ${new Date(t.due_date).toLocaleString('ru-RU', {day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</span>`:''}
-                <span>${t.status==='completed'?'✅ Выполнена':'📌 В работе'}</span>
-            </div>
-            ${t.tags&&t.tags.length?`<div class="task-tags">${t.tags.map(tag=>`<span class="tag">#${tag}</span>`).join('')}</div>`:''}
-        </div>
-    `).join('');
+function renderTasks(list, id) {
+    var c = document.getElementById(id); if (!c) return;
+    if (!list.length) { c.innerHTML = '<p style="color:#b0b0c0;text-align:center;padding:20px;">Нет задач</p>'; return; }
+    c.innerHTML = list.map(function(t) {
+        var p = { 'high': '🔥 Высокий', 'medium': '🟡 Средний', 'low': '🟢 Низкий' }[t.priority] || t.priority;
+        return '<div class="task ' + (t.priority || 'medium') + '"><div class="row"><div><h4>' + (t.short_summary || t.title) + '</h4><p class="desc">' + (t.description || '') + '</p></div><div>' +
+            (t.status !== 'completed' ? '<button onclick="doneTask(\'' + t.id + '\')" style="background:none;border:none;cursor:pointer;font-size:16px;">✅</button>' : '') +
+            '<button onclick="editTask(\'' + t.id + '\')" style="background:none;border:none;cursor:pointer;font-size:16px;">✏️</button>' +
+            '<button onclick="delTask(\'' + t.id + '\')" style="background:none;border:none;cursor:pointer;font-size:16px;">🗑️</button></div></div>' +
+            '<div class="meta"><span>' + p + '</span>' + (t.estimated_duration ? '<span>⏱ ' + t.estimated_duration + ' мин</span>' : '') +
+            (t.due_date ? '<span>📅 ' + new Date(t.due_date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + '</span>' : '') + '</div>' +
+            (t.tags && t.tags.length ? '<div class="tags">' + t.tags.map(function(tg) { return '<span onclick="setFilter(\'' + tg + '\')">#' + tg + '</span>'; }).join('') + '</div>' : '') + '</div>';
+    }).join('');
 }
 
-// ========== СОХРАНИТЬ (СОЗДАТЬ ИЛИ ОБНОВИТЬ) ==========
-async function saveTask(e) {
-    e.preventDefault();
-    
-    const taskId = document.getElementById('task-id').value;
-    const title = document.getElementById('task-title').value.trim();
-    const desc = document.getElementById('task-desc').value.trim();
-    const due = document.getElementById('task-due').value;
-    
-    if (!title) { alert('Введите заголовок'); return; }
-    
-    const data = { title, description: desc, due_date: due || null };
-    
-    try {
-        if (taskId) {
-            // РЕДАКТИРОВАНИЕ существующей задачи
-            console.log('Updating task:', taskId, data);
-            await api(`/tasks/tasks/${taskId}/`, { 
-                method: 'PUT',  // PUT вместо PATCH - полное обновление
-                body: JSON.stringify(data) 
-            });
-        } else {
-            // СОЗДАНИЕ новой задачи
-            console.log('Creating task:', data);
-            await api('/tasks/tasks/', { 
-                method: 'POST', 
-                body: JSON.stringify(data) 
-            });
-        }
-        
-        closeModal();
-        refreshAll();
-    } catch(err) { 
-        console.error('Save error:', err);
-        alert('Ошибка сохранения: '+err.message); 
-    }
+function saveTask() {
+    var id = document.getElementById('edit-id').value;
+    var data = { title: document.getElementById('task-title').value.trim(), description: document.getElementById('task-desc').value.trim(), due_date: document.getElementById('task-due').value || null };
+    if (!data.title) { alert('Введите заголовок'); return; }
+    var p = id ? api('/tasks/tasks/' + id + '/', { method: 'PATCH', body: JSON.stringify(data) }) : api('/tasks/tasks/', { method: 'POST', body: JSON.stringify(data) });
+    p.then(function() { closeModal(); loadDashboard(); loadTasks(); loadTags(); if (calendar) loadCalEvents(); }).catch(function(e) { alert(e.message); });
 }
 
-// ========== РЕДАКТИРОВАТЬ ==========
-async function editTask(id) {
-    try {
-        const task = await api(`/tasks/tasks/${id}/`);
-        document.getElementById('modal-title').textContent = '✏️ Редактировать задачу';
-        document.getElementById('task-id').value = task.id;
-        document.getElementById('task-title').value = task.title || '';
-        document.getElementById('task-desc').value = task.description || '';
-        
-        if (task.due_date) {
-            // Форматируем дату для input datetime-local
-            const d = new Date(task.due_date);
-            const pad = (n) => String(n).padStart(2, '0');
-            document.getElementById('task-due').value = 
-                `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        } else {
-            document.getElementById('task-due').value = '';
-        }
-        
-        document.getElementById('modal').style.display = 'flex';
-    } catch(err) {
-        alert('Ошибка загрузки задачи: '+err.message);
-    }
+function editTask(id) {
+    api('/tasks/tasks/' + id + '/').then(function(t) {
+        document.getElementById('modal-title').textContent = '✏️ Редактировать';
+        document.getElementById('edit-id').value = t.id;
+        document.getElementById('task-title').value = t.title || '';
+        document.getElementById('task-desc').value = t.description || '';
+        document.getElementById('task-due').value = t.due_date ? new Date(t.due_date).toISOString().slice(0, 16) : '';
+        document.getElementById('modal').classList.add('active');
+    });
 }
 
-// ========== УДАЛИТЬ ==========
-async function deleteTask(id) {
-    if (!confirm('Удалить задачу?')) return;
-    try {
-        await api(`/tasks/tasks/${id}/`, { method: 'DELETE' });
-        
-        // Удаляем из DOM сразу
-        const el = document.getElementById(`task-${id}`);
-        if (el) el.remove();
-        
-        // Обновляем все виды
-        refreshAll();
-    } catch(err) { console.error('Delete error:', err); }
-}
+function delTask(id) { if (!confirm('Удалить?')) return; api('/tasks/tasks/' + id + '/', { method: 'DELETE' }).then(function() { loadDashboard(); loadTasks(); loadTags(); if (calendar) loadCalEvents(); }); }
+function doneTask(id) { api('/tasks/tasks/' + id + '/mark_completed/', { method: 'POST' }).then(function() { loadDashboard(); loadTasks(); }); }
 
-async function completeTask(id) {
-    try {
-        await api(`/tasks/tasks/${id}/mark_completed/`, { method: 'POST' });
-        refreshAll();
-    } catch(err) { console.error(err); }
-}
-
-// ========== ОБНОВИТЬ ВСЕ ==========
-function refreshAll() {
-    loadDashboard();
-    
-    const activeTab = document.querySelector('.tab-btn.active')?.id;
-    if (activeTab === 'btn-tasks') loadTasks();
-    if (activeTab === 'btn-calendar' && calendar) loadCalendarEvents();
-    
-    // Всегда обновляем календарь если он есть
-    if (calendar) loadCalendarEvents();
-}
-
-// ========== МОДАЛЬНОЕ ОКНО ==========
 function openModal() {
     document.getElementById('modal-title').textContent = '📝 Новая задача';
-    document.getElementById('task-id').value = '';
+    document.getElementById('edit-id').value = '';
     document.getElementById('task-title').value = '';
     document.getElementById('task-desc').value = '';
     document.getElementById('task-due').value = '';
-    document.getElementById('modal').style.display = 'flex';
+    document.getElementById('modal').classList.add('active');
 }
+function closeModal() { document.getElementById('modal').classList.remove('active'); }
 
-function closeModal() {
-    document.getElementById('modal').style.display = 'none';
-}
-
-// Закрытие по клику на фон
-document.addEventListener('click', function(e) {
-    if (e.target.id === 'modal') closeModal();
-});
-
-// ========== КАЛЕНДАРЬ ==========
-function initCalendar() {
-    const el = document.getElementById('calendar');
-    if (!el) return;
-    
-    if (calendar) {
-        calendar.destroy();
-        calendar = null;
-    }
-    
+function initCal() {
+    var el = document.getElementById('calendar'); if (!el) return; if (calendar) calendar.destroy();
     calendar = new FullCalendar.Calendar(el, {
-        initialView: 'dayGridMonth',
-        locale: 'ru',
-        firstDay: 1,
-        height: 'auto',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek'
-        },
+        initialView: 'dayGridMonth', locale: 'ru', firstDay: 1, height: 'auto',
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek' },
         buttonText: { today: 'Сегодня', month: 'Месяц', week: 'Неделя' },
-        events: [],
-        eventClick: function(info) {
-            showEventMenu(info.event, info.jsEvent);
-        }
+        eventClick: function(info) { if (confirm('Редактировать?')) editTask(info.event.id); }
     });
-    
-    calendar.render();
-    loadCalendarEvents();
+    calendar.render(); loadCalEvents();
 }
 
-function showEventMenu(event, jsEvent) {
-    // Удаляем старое меню
-    const old = document.getElementById('event-menu');
-    if (old) old.remove();
-    
-    const menu = document.createElement('div');
-    menu.id = 'event-menu';
-    menu.style.cssText = `
-        position: fixed; background: #2d2d3f; border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 12px; padding: 8px; z-index: 10000;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5); min-width: 200px;
-    `;
-    
-    const p = event.extendedProps.priority || 'medium';
-    const ptext = p === 'high' ? '🔥 Высокий' : p === 'medium' ? '🟡 Средний' : '🟢 Низкий';
-    const start = event.start;
-    
-    menu.innerHTML = `
-        <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
-            <h4 style="margin:0 0 4px 0;color:#fff;">${event.title}</h4>
-            <p style="margin:0;color:#b0b0c0;font-size:12px;">
-                ${start ? '📅 '+start.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) : ''}
-                ${start ? ' 🕐 '+start.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : ''}
-            </p>
-            <p style="margin:4px 0 0;font-size:12px;">${ptext}</p>
-        </div>
-        <button onclick="editTask('${event.id}');closeEventMenu();" 
-            style="width:100%;padding:10px;background:transparent;border:none;color:#fff;text-align:left;cursor:pointer;border-radius:8px;font-size:14px;"
-            onmouseover="this.style.background='#3a3a4f'" onmouseout="this.style.background='transparent'">
-            ✏️ Редактировать
-        </button>
-        <button onclick="deleteTask('${event.id}');closeEventMenu();" 
-            style="width:100%;padding:10px;background:transparent;border:none;color:#FF4444;text-align:left;cursor:pointer;border-radius:8px;font-size:14px;"
-            onmouseover="this.style.background='rgba(255,68,68,0.1)'" onmouseout="this.style.background='transparent'">
-            🗑️ Удалить
-        </button>
-        ${event.extendedProps.status !== 'completed' ? `
-        <button onclick="completeTask('${event.id}');closeEventMenu();" 
-            style="width:100%;padding:10px;background:transparent;border:none;color:#00C851;text-align:left;cursor:pointer;border-radius:8px;font-size:14px;"
-            onmouseover="this.style.background='rgba(0,200,81,0.1)'" onmouseout="this.style.background='transparent'">
-            ✅ Выполнено
-        </button>` : ''}
-    `;
-    
-    menu.style.left = Math.min(jsEvent.clientX, window.innerWidth - 220) + 'px';
-    menu.style.top = Math.min(jsEvent.clientY, window.innerHeight - 200) + 'px';
-    
-    document.body.appendChild(menu);
-    
-    setTimeout(() => {
-        document.addEventListener('click', function closeMenu(e) {
-            if (!menu.contains(e.target)) {
-                menu.remove();
-                document.removeEventListener('click', closeMenu);
-            }
-        });
-    }, 10);
-}
-
-function closeEventMenu() {
-    const menu = document.getElementById('event-menu');
-    if (menu) menu.remove();
-}
-
-async function loadCalendarEvents() {
+function loadCalEvents() {
     if (!calendar) return;
-    
-    try {
-        const tasks = await api('/tasks/tasks/');
-        const list = Array.isArray(tasks) ? tasks : (tasks.results||[]);
-        
-        // Удаляем ВСЕ события
+    var url = '/tasks/tasks/'; if (filterTag) url += '?tag=' + filterTag;
+    api(url).then(function(tasks) {
+        var list = Array.isArray(tasks) ? tasks : (tasks.results || []);
         calendar.removeAllEvents();
-        
-        // Добавляем заново
-        list.forEach(t => {
-            if (t.due_date) {
-                calendar.addEvent({
-                    id: t.id,
-                    title: t.short_summary || t.title || 'Задача',
-                    start: t.due_date,
-                    backgroundColor: t.priority==='high'?'#FF4444':t.priority==='medium'?'#FFBB33':'#00C851',
-                    borderColor: t.priority==='high'?'#FF4444':t.priority==='medium'?'#FFBB33':'#00C851',
-                    textColor: '#fff',
-                    extendedProps: {
-                        priority: t.priority,
-                        status: t.status,
-                        description: t.description,
-                        tags: t.tags
-                    }
-                });
-            }
+        list.forEach(function(t) {
+            if (t.due_date) calendar.addEvent({ id: t.id, title: t.short_summary || t.title || 'Задача', start: t.due_date, backgroundColor: t.priority === 'high' ? '#ff4444' : t.priority === 'medium' ? '#ffbb33' : '#00C851', borderColor: t.priority === 'high' ? '#ff4444' : t.priority === 'medium' ? '#ffbb33' : '#00C851', textColor: '#fff' });
         });
-        
-        console.log('Calendar updated:', list.length, 'tasks');
-    } catch(err) { 
-        console.error('Calendar load error:', err); 
-    }
+    }).catch(function(e) {});
 }
+
+function loadSettings() {
+    api('/auth/notification-settings/').then(function(s) {
+        document.getElementById('set-email').checked = s.email_notifications;
+        document.getElementById('set-morning').checked = s.morning_summary;
+        document.getElementById('set-morning-time').value = s.morning_summary_time || '08:00';
+        document.getElementById('set-reminder').value = s.reminder_before_task || 30;
+    }).catch(function(e) {});
+}
+
+function saveSettings() {
+    var data = {
+        email_notifications: document.getElementById('set-email').checked,
+        morning_summary: document.getElementById('set-morning').checked,
+        morning_summary_time: document.getElementById('set-morning-time').value,
+        reminder_before_task: parseInt(document.getElementById('set-reminder').value)
+    };
+    fetch(API + '/auth/notification-settings/', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }, body: JSON.stringify(data) })
+        .then(function(r) { return r.json(); })
+        .then(function() { var el = document.getElementById('settings-saved'); el.style.display = 'block'; setTimeout(function() { el.style.display = 'none'; }, 2000); });
+}
+
+console.log('Script loaded successfully!');
